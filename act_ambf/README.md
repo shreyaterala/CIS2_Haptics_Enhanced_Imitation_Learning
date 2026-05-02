@@ -212,25 +212,6 @@ python training_scripts/imitate_episodes.py \
   --temporal_agg
 ```
 
-### dVRK Retraction Task
-
-```bash
-python training_scripts/imitate_episodes.py \
-  --task_name dvrk_retraction_u_nof \
-  --ckpt_dir ./checkpoints/dvrk_retraction_u_nof \
-  --policy_class ACT \
-  --batch_size 8 \
-  --seed 0 \
-  --num_epochs 5000 \
-  --lr 2e-6 \
-  --state_dim 8 \
-  --chunk_size 50 \
-  --hidden_dim 512 \
-  --dim_feedforward 3200 \
-  --kl_weight 10 \
-  --temporal_agg
-```
-
 > **Tip:** Monitor training loss with `visualize_episodes.py` in `training_scripts/`.
 
 ---
