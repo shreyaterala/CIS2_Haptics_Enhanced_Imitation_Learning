@@ -25,24 +25,28 @@ ACT (Action Chunking with Transformers) adapted for the AMBF simulation environm
 - AMBF simulator installed and sourced
 - dVRK console (on the hardware PC)
 
-### Create the Conda Environment
+### Installation
 
 ```bash
 conda env create -f conda_env.yaml
 conda activate aloha
+pip install torchvision
+pip install torch
+pip install pyquaternion
+pip install pyyaml
+pip install rospkg
+pip install pexpect
+pip install mujoco==2.3.7
+pip install dm_control==1.0.14
+pip install opencv-python
+pip install matplotlib
+pip install einops
+pip install packaging
+pip install h5py
+pip install ipython
+cd act_dvrk_nf/detr && pip install -e .
 ```
-
 > **Note:** The environment is named `aloha` and uses Python 3.9 with PyTorch 2.0 + CUDA 11.8.
-
-### Install Additional pip Dependencies
-
-After activating the environment, install any remaining packages:
-
-```bash
-pip install -e .
-```
-
-> If no `setup.py` / `pyproject.toml` is present, skip this step.
 
 ### Source ROS 2
 
