@@ -1,67 +1,158 @@
-# CIS2_Haptics_Enhanced_Imitation_Learning
-ACT Training and Deployment Code for CIS2
+# CIS2 Haptics-Enhanced Imitation Learning
 
-dVRK Data Collection
+ACT (Action Chunking with Transformers) training and deployment code for surgical robot tasks on the dVRK and AMBF simulator.
+This repository contains the full pipeline — from bilateral teleoperation and data collection through model training to policy deployment — across several haptics configurations.
 
------ Normal Teleop w/o Force Feedback ------
+---
 
-1. Setup wrist cameras
-- Attach to PSM and plug into any usb plugin on the computer
-- Run the following:
-source act_env/bin/activate
-cd ~/act_dvrk
-python wrist_cameras_video.py
+## Repository Overview
 
-2. Set up endoscope cameras
-- Run the following in a new terminal:
-ros2 launch /home/hzhao78/ros2_ws/src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py stereo_rig_name:=console1
+```
+CIS2_Haptics_Enhanced_Imitation_Learning/
+├── bilateral_teleoperation/    # Bilateral teleoperation scripts (force-feedback teleoperation)
+├── act_ambf/                   # ACT in AMBF simulation (no force feedback)
+├── act_dvrk/                   # ACT on real dVRK — baseline (joints only)
+├── act_dvrk_cf_v1/             # ACT on real dVRK — Cartesian force v1 (3-DOF)
+├── act_dvrk_cf_v2/             # ACT on real dVRK — Cartesian force v2 (3-DOF, improved)
+└── act_dvrk_jf/                # ACT on real dVRK — Joint-space force (6-DOF wrench)
+```
 
-3. Run teleoperation 
-- Run the following in a new terminal:
-ros2 run dvrk_robot dvrk_system \
--j ~/ros2_ws/src/dvrk/dvrk_config_jhu/jhu-dVRK/system-MTML-PSM1-PSM2-Teleop.json -C
+---
 
-4. Data Collection
-- Run the following in a new terminal:
-cd ~/act_dvrk
-python record_dvrk_episodes.py --output_dir ./dvrk_dataset --seconds_per_episode 10 --fps 20 --wrist_cameras cam1
+## Pipeline at a Glance
 
------ Bilateral Teleop ----------------------
+```
+Teleoperation ──► Data Collection ──► (Force Alignment) ──► ACT Training ──► Policy Deployment
+     │                  │                     │                   │                   │
+bilateral_        act_dvrk/            act_dvrk_cf_v*/      imitate_             run_dvrk_act.py
+teleoperation/    data_recording/      data_recording/      episodes.py          (or run_ambf_act.py)
+```
 
-ros2 run dvrk_robot dvrk_system \
--j ~/ros2_ws/src/dvrk/dvrk_config_jhu/jhu-dVRK/system-MTML-MTMR-PSM1-PSM2.json
+---
 
-to run normal bilateral teleoperation:
-cd ~/ros2_ws/src/dvrk/dvrk_python/scripts
-ros2 run dvrk_python dvrk_bila_teleop.py -m MTML -p PSM2 -t "Normal"
+## Module Descriptions
 
-to run the bilateral teleop with the neural network for force estimation:
-cd ~/ros2_ws/src/dvrk/dvrk_python
-source bil_env/bin/activate
-pip install onnxruntime
-cd scripts
-ros2 run dvrk_python dvrk_bila_teleop.py -m MTML -p PSM2 -t "Neural Network"
+### `bilateral_teleoperation/`
 
-to collect data for training the neural network:
-** change DATA_PATH at the top of the dvrk_bila_teleop.py file which is located in the following folder
-cd ~/ros2_ws/src/dvrk/dvrk_python/scripts
-ros2 run dvrk_python dvrk_bila_teleop.py -m MTML -p PSM2 -t "Data Collection"
+Scripts for bilateral teleoperation of the dVRK with optional neural-network-based force estimation.
+Used independently of ACT training — this is the **operator interface** for collecting demonstrations.
 
------ Data Collection w/ Force Feedback -----
+Key files:
+- `dvrk_bila_teleop.py` — Main teleoperation driver. Supports three modes:
+  - `"Normal"` — standard teleoperation without force feedback
+  - `"Neural Network"` — force estimation via ONNX model
+  - `"Data Collection"` — records data for training the force estimation network
 
-1. Publish the ros2 node
-cd ~/ros2_ws
-ros2 run atinetft_ros atinetft_ros2_node -i 192.168.1.1
+See [`bilateral_teleoperation/README.md`](bilateral_teleoperation/README.md) for full setup and usage.
 
-*Rebias the sensor at startup to zero it
+---
 
-2. To listen to the ros topic:
-ros2 topic echo /measured_cf
+### `act_ambf/`
 
-3. To save the data for ground truth later
---force_sensor
+ACT running inside the **AMBF surgical robotics simulator**. Used for sim-to-real development and testing policy architectures before transferring to real hardware.
 
------ Notes from Data Collection ----
-* Make sure to move the robot around prior to collecting data to make sure all the rostopics are published before recording an episode
-* Make sure teleoperation is off if running the bilateral teleop code
-* If there are more than a couple of frames being dropped (ie >10) kill all the processes and restart everything running in the terminals
+- **State dim:** 7 (single-arm simulation)
+- **Force feedback:** None
+- **Entry points:** `data_collection_scripts/record_ambf_episodes.py`, `training_scripts/imitate_episodes.py`, `policy_deployment_scripts/run_ambf_act.py`
+
+See [`act_ambf/README.md`](act_ambf/README.md) for full setup, AMBF launch instructions, and training configs.
+
+---
+
+### `act_dvrk/`
+
+Baseline ACT on the **real dVRK** — joint positions and camera images only, no haptic augmentation.
+
+- **State dim:** 14 (7 joints × 2 PSMs)
+- **Force feedback:** None
+- **Task:** `dvrk_retraction`
+- **Entry points:** `data_recording/record_dvrk_episodes.py`, `imitate_episodes.py`, `run_dvrk_act.py`
+
+See [`act_dvrk/README.md`](act_dvrk/README.md) for hardware setup, data collection, training, and deployment.
+
+---
+
+### `act_dvrk_cf_v1/`
+
+First-generation haptics-enhanced ACT on the dVRK. Appends **3-DOF Cartesian force** (Fx, Fy, Fz) from an ATI NetFT sensor to the state.
+
+- **State dim:** 17 (14 joints + 3 Cartesian force channels)
+- **Force feedback:** ATI NetFT → `/measured_cf` (3-DOF)
+- **Task:** `dvrk_retraction_cf`
+- **Post-processing:** `data_recording/hdf5_filter_with_cf_align.py` aligns force timestamps
+
+See [`act_dvrk_cf_v1/README.md`](act_dvrk_cf_v1/README.md) for full pipeline details.
+
+---
+
+### `act_dvrk_cf_v2/`
+
+Second-generation Cartesian-force variant. Structurally identical to v1 but with **improved force timestamp alignment and filtering** in `hdf5_filter_with_cf_align.py`.
+
+- **State dim:** 17 (14 joints + 3 Cartesian force channels)
+- **Force feedback:** ATI NetFT → `/measured_cf` (3-DOF, improved alignment)
+- **Task:** `dvrk_retraction_cf`
+
+See [`act_dvrk_cf_v2/README.md`](act_dvrk_cf_v2/README.md) for full pipeline details.
+
+---
+
+### `act_dvrk_jf/`
+
+Full **6-DOF wrench** haptics-enhanced ACT. Appends both linear forces and torques (Fx, Fy, Fz, Tx, Ty, Tz) to give the policy richer contact information during grasping and rotation tasks.
+
+- **State dim:** 20 (14 joints + 6-DOF wrench)
+- **Force feedback:** ATI NetFT → `/measured_cf` (6-DOF)
+- **Task:** `dvrk_retraction_u_cf`
+
+See [`act_dvrk_jf/README.md`](act_dvrk_jf/README.md) for full pipeline details.
+
+---
+
+## Quick-Start: Real dVRK (Baseline)
+
+```bash
+# 1. Setup cameras and dVRK (see act_dvrk/README.md)
+
+# 2. Record demonstrations
+conda activate aloha && cd act_dvrk/
+python data_recording/record_dvrk_episodes.py \
+    --output_dir ./data/dvrk_dataset \
+    --seconds_per_episode 10 --fps 20 --wrist_cameras cam1
+
+# 3. Train
+python imitate_episodes.py \
+    --task_name dvrk_retraction \
+    --ckpt_dir ./checkpoints/dvrk_retraction \
+    --policy_class ACT --state_dim 14 --chunk_size 100 \
+    --hidden_dim 512 --dim_feedforward 3200 \
+    --kl_weight 10 --num_epochs 3000 --lr 1e-5 --temporal_agg
+
+# 4. Deploy
+python run_dvrk_act.py \
+    --ckpt_dir ./checkpoints/dvrk_retraction \
+    --task_name dvrk_retraction \
+    --state_dim 14 --chunk_size 100 --fps 20 --temporal_agg
+```
+
+---
+
+## Choosing a Variant
+
+| Variant | State Dim | Force Signal | When to Use |
+|---|---|---|---|
+| `act_dvrk` | 14 | None | Baseline; no ATI sensor |
+| `act_dvrk_cf_v1` | 17 | 3-DOF Cartesian force | First-pass haptics experiments |
+| `act_dvrk_cf_v2` | 17 | 3-DOF Cartesian force (improved) | Cleaner force data needed |
+| `act_dvrk_jf` | 20 | 6-DOF wrench (force + torque) | Grasping / rotational contact tasks |
+| `act_ambf` | 7 | None | Simulation only |
+
+---
+
+## Notes
+
+- Move the robot around **before** each recording session to ensure all ROS 2 topics are publishing.
+- Re-bias the ATI sensor at the start of every session when using force feedback variants.
+- If more than ~10 frames are dropped during recording, kill all terminals and restart.
+- For real-world data, train for at least **5000 epochs** or until 3–4× past loss plateau.
+- Use `--temporal_agg` at both training and deployment for smoother trajectories.

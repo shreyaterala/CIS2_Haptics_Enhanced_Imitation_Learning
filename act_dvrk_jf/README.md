@@ -1,89 +1,210 @@
-# ACT: Action Chunking with Transformers
+# ACT-dVRK-JF: Action Chunking with Transformers + Joint-Space Force Feedback
 
-### *New*: [ACT tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing)
-TL;DR: if your ACT policy is jerky or pauses in the middle of an episode, just train for longer! Success rate and smoothness can improve way after loss plateaus.
+ACT adapted for the dVRK with **6-DOF joint-space force feedback**.
+This variant appends a full 6-DOF Cartesian wrench (3 forces + 3 torques) to the state, enabling the policy to respond to richer haptic information during tissue interaction.
 
-#### Project Website: https://tonyzhaozh.github.io/aloha/
+> **Tuning tip:** Jerky or pausing policies typically need more epochs. See the [ACT tuning guide](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing).
 
-This repo contains the implementation of ACT, together with 2 simulated environments:
-Transfer Cube and Bimanual Insertion. You can train and evaluate ACT in sim or real.
-For real, you would also need to install [ALOHA](https://github.com/tonyzhaozh/aloha).
+---
 
-### Updates:
-You can find all scripted/human demo for simulated environments [here](https://drive.google.com/drive/folders/1gPR03v05S1xiInoVJn7G7VJ9pDCnxq9O?usp=share_link).
+## Table of Contents
 
+1. [Model Architecture](#1-model-architecture)
+2. [Repository Structure](#2-repository-structure)
+3. [Environment Setup](#3-environment-setup)
+4. [Hardware Setup](#4-hardware-setup)
+5. [Data Collection](#5-data-collection)
+6. [Training](#6-training)
+7. [Policy Deployment](#7-policy-deployment)
 
-### Repo Structure
-- ``imitate_episodes.py`` Train and Evaluate ACT
-- ``policy.py`` An adaptor for ACT policy
-- ``detr`` Model definitions of ACT, modified from DETR
-- ``sim_env.py`` Mujoco + DM_Control environments with joint space control
-- ``ee_sim_env.py`` Mujoco + DM_Control environments with EE space control
-- ``scripted_policy.py`` Scripted policies for sim environments
-- ``constants.py`` Constants shared across files
-- ``utils.py`` Utils such as data loading and helper functions
-- ``visualize_episodes.py`` Save videos from a .hdf5 dataset
+---
 
+## 1. Model Architecture
 
-### Installation
+ACT predicts **chunks** of future actions in one forward pass, reducing compounding errors and enabling smooth real-robot trajectories.
 
-    conda create -n aloha python=3.8.10
-    conda activate aloha
-    pip install torchvision
-    pip install torch
-    pip install pyquaternion
-    pip install pyyaml
-    pip install rospkg
-    pip install pexpect
-    pip install mujoco==2.3.7
-    pip install dm_control==1.0.14
-    pip install opencv-python
-    pip install matplotlib
-    pip install einops
-    pip install packaging
-    pip install h5py
-    pip install ipython
-    cd act/detr && pip install -e .
+### Haptics Extension — Joint-Space Force (6-DOF)
 
-### Example Usages
+This variant extends the state with a **full 6-DOF wrench** (Fx, Fy, Fz, Tx, Ty, Tz):
 
-To set up a new terminal, run:
+| Signal | Dim | Source |
+|---|---|---|
+| PSM joint positions (2 arms) | 14 | dVRK |
+| 6-DOF wrench (force + torque) | 6 | ATI NetFT (`/measured_cf`) |
+| **Total state** | **20** | — |
 
-    conda activate aloha
-    cd <path to act repo>
+The additional torque channels give the policy information about rotational contact forces, which is especially useful for tasks involving grasping or tool rotation against tissue.
 
-### Simulated experiments
+### Key Components
 
-We use ``sim_transfer_cube_scripted`` task in the examples below. Another option is ``sim_insertion_scripted``.
-To generated 50 episodes of scripted data, run:
+| File | Role |
+|---|---|
+| `policy.py` | ACT wrapper; `CF_DIM = 6` from `constants.py` |
+| `detr/` | Transformer encoder–decoder |
+| `imitate_episodes.py` | Training & evaluation |
+| `utils.py` | Data loading with 6-DOF force channels |
+| `constants.py` | `STATE_DIM=14`, `CF_DIM=6`, extended task configs |
+| `data_recording/hdf5_filter_with_cf_align.py` | Force timestamp alignment |
 
-    python3 record_sim_episodes.py \
-    --task_name sim_transfer_cube_scripted \
-    --dataset_dir <data save dir> \
-    --num_episodes 50
+---
 
-To can add the flag ``--onscreen_render`` to see real-time rendering.
-To visualize the episode after it is collected, run
+## 2. Repository Structure
 
-    python3 visualize_episodes.py --dataset_dir <data save dir> --episode_idx 0
+```
+act_dvrk_jf/
+├── README.md
+├── conda_env.yaml
+├── constants.py                      # STATE_DIM=14, CF_DIM=6
+├── imitate_episodes.py
+├── policy.py
+├── scripted_policy.py
+├── utils.py
+├── detr/
+├── data_recording/
+│   ├── record_dvrk_episodes.py
+│   ├── hdf5_filter_with_cf_align.py  # Aligns 6-DOF wrench timestamps
+│   └── print_hdf5.py
+└── assets/
+```
 
-To train ACT:
-    
-    # Transfer Cube task
-    python3 imitate_episodes.py \
-    --task_name sim_transfer_cube_scripted \
-    --ckpt_dir <ckpt dir> \
-    --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 \
-    --seed 0
+---
 
+## 3. Environment Setup
 
-To evaluate the policy, run the same command but add ``--eval``. This loads the best validation checkpoint.
-The success rate should be around 90% for transfer cube, and around 50% for insertion.
-To enable temporal ensembling, add flag ``--temporal_agg``.
-Videos will be saved to ``<ckpt_dir>`` for each rollout.
-You can also add ``--onscreen_render`` to see real-time rendering during evaluation.
+```bash
+conda env create -f conda_env.yaml
+conda activate aloha
+pip install torchvision torch pyquaternion pyyaml rospkg pexpect
+pip install mujoco==2.3.7 dm_control==1.0.14
+pip install opencv-python matplotlib einops packaging h5py ipython
+cd act_dvrk_jf/detr && pip install -e .
+```
 
-For real-world data where things can be harder to model, train for at least 5000 epochs or 3-4 times the length after the loss has plateaued.
-Please refer to [tuning tips](https://docs.google.com/document/d/1FVIZfoALXg_ZkYKaYVh-qOlaXveq5CtvJHXkY25eYhs/edit?usp=sharing) for more info.
+Source ROS 2 in **every terminal**:
 
+```bash
+source /opt/ros/jazzy/setup.bash
+```
+
+**Multi-PC networking:**
+
+```bash
+unset ROS_AUTOMATIC_DISCOVERY_RANGE ROS_STATIC_PEERS ROS_LOCALHOST_ONLY RMW_IMPLEMENTATION
+export ROS_DOMAIN_ID=46
+export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+ros2 daemon stop && ros2 daemon start
+```
+
+---
+
+## 4. Hardware Setup
+
+**Terminal 1** — Wrist cameras:
+```bash
+conda activate aloha && cd act_dvrk_jf/
+python wrist_cameras_video.py
+```
+
+**Terminal 2** — Endoscope cameras:
+```bash
+ros2 launch /home/hzhao78/ros2_ws/src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py stereo_rig_name:=console1
+```
+
+**Terminal 3** — dVRK teleoperation:
+```bash
+ros2 run dvrk_robot dvrk_system \
+    -j ~/ros2_ws/src/dvrk/dvrk_config_jhu/jhu-dVRK/system-MTML-PSM1-PSM2-Teleop.json -C
+```
+
+**Terminal 4** — ATI force sensor:
+```bash
+ros2 run atinetft_ros atinetft_ros2_node -i 192.168.1.1
+```
+
+> Re-bias the sensor at startup to zero gravity/offset. Verify with: `ros2 topic echo /measured_cf`
+
+---
+
+## 5. Data Collection
+
+### Record Episodes (with 6-DOF wrench)
+
+```bash
+conda activate aloha && cd act_dvrk_jf/
+python data_recording/record_dvrk_episodes.py \
+    --output_dir ./data/dvrk_dataset_jf \
+    --seconds_per_episode 10 \
+    --fps 20 \
+    --wrist_cameras cam1 \
+    --force_sensor
+```
+
+The recording script captures all 6 wrench channels (3 forces + 3 torques).
+
+### Align Force Timestamps
+
+```bash
+python data_recording/hdf5_filter_with_cf_align.py \
+    --input_dir ./data/dvrk_dataset_jf \
+    --output_dir ./data/dvrk_dataset_jf_aligned
+```
+
+### Inspect Episodes
+
+```bash
+python data_recording/print_hdf5.py --episode ./data/dvrk_dataset_jf_aligned/episode_001.hdf5
+```
+
+> Move the robot briefly before recording to ensure all topics are live. If >10 frames drop, restart all terminals.
+
+---
+
+## 6. Training
+
+```bash
+conda activate aloha && cd act_dvrk_jf/
+python imitate_episodes.py \
+    --task_name dvrk_retraction_u_cf \
+    --ckpt_dir ./checkpoints/dvrk_retraction_jf \
+    --policy_class ACT \
+    --batch_size 8 \
+    --seed 0 \
+    --num_epochs 3000 \
+    --lr 1e-5 \
+    --state_dim 20 \
+    --chunk_size 100 \
+    --hidden_dim 512 \
+    --dim_feedforward 3200 \
+    --kl_weight 10 \
+    --temporal_agg
+```
+
+> `--state_dim 20` = 14 joint positions + 6 wrench channels (`CF_DIM=6`).  
+> Use ≥ 5000 epochs for real-world data.
+
+### Key Training Flags
+
+| Flag | Value | Description |
+|---|---|---|
+| `--task_name` | `dvrk_retraction_u_cf` | Matches key in `constants.py` |
+| `--state_dim` | 20 | 14 joints + 6 wrench channels |
+| `--chunk_size` | 100 | Action chunk length |
+| `--kl_weight` | 10 | CVAE regularization strength |
+| `--temporal_agg` | flag | Enable temporal ensembling |
+
+---
+
+## 7. Policy Deployment
+
+```bash
+conda activate aloha && cd act_dvrk_jf/
+python run_dvrk_act.py \
+    --ckpt_dir ./checkpoints/dvrk_retraction_jf \
+    --task_name dvrk_retraction_u_cf \
+    --state_dim 20 \
+    --chunk_size 100 \
+    --fps 20 \
+    --temporal_agg
+```
+
+> Ensure the ATI sensor is running and re-biased before inference. The full 6-DOF wrench must be publishing on `/measured_cf`.
