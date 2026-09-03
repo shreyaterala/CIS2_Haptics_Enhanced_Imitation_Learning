@@ -69,3 +69,20 @@ ros2 run dvrk_python dvrk_bila_teleop.py -m MTML -p PSM2 -t "Neural Network"
 cd ~/ros2_ws/src/dvrk/dvrk_python/scripts
 ros2 run dvrk_python dvrk_bila_teleop.py -m MTML -p PSM2 -t "Data Collection"
 ```
+
+#### Neural Network Training Pipeline
+
+1. **Collect data** \
+   Run `dvrk_bila_teleop.py` using the **Data Collection** mode to record teleoperation data to CSV files.
+
+2. **Split the data** \
+   Run `model/csv_split.py` to split the collected data into the required master/puppet and first/last joint datasets.
+
+3. **Train the neural networks** \
+   Run `model/model.py` using the generated CSV files. This produces trained PyTorch checkpoint files (`.pth.tar`).
+
+4. **Convert the trained models** \
+   Convert the `.pth.tar` checkpoints to **ONNX (`.onnx`)** models and save the corresponding **normalization parameters (`.npz`)**.
+
+5. **Run neural-network teleoperation** \
+   Place the resulting `.onnx` and `.npz` files in the expected model directory and run `dvrk_bila_teleop.py` using the **Neural Network** mode.
