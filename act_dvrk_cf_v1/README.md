@@ -105,7 +105,8 @@ python wrist_cameras_video.py
 
 **Terminal 2** — Endoscope cameras:
 ```bash
-ros2 launch /home/hzhao78/ros2_ws/src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py stereo_rig_name:=console1
+cd ros2_ws
+ros2 /src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py stereo_rig_name:=console1
 ```
 
 **Terminal 3** — dVRK teleoperation:
