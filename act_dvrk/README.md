@@ -79,8 +79,8 @@ act_dvrk/
 ### Installation
 
 ```bash
-conda env create -f conda_env.yaml
-conda activate aloha
+python -m venv aloha
+source aloha/bin/activate
 pip install torchvision
 pip install torch
 pip install pyquaternion
