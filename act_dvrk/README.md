@@ -140,7 +140,8 @@ python wrist_cameras_video.py
 In a new terminal:
 
 ```bash
-ros2 launch /home/hzhao78/ros2_ws/src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py \
+cd ros2_ws
+ros2 launch /ros2_ws/src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py \
     stereo_rig_name:=console1
 ```
 
