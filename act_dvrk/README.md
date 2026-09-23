@@ -130,7 +130,7 @@ ros2 daemon start
 Attach the wrist cameras to the PSM and plug them into a USB port, then verify they stream:
 
 ```bash
-conda activate aloha
+source aloha/bin/activate
 cd act_dvrk/
 python wrist_cameras_video.py
 ```
@@ -163,7 +163,7 @@ ros2 run dvrk_robot dvrk_system \
 ### Record Episodes
 
 ```bash
-conda activate aloha
+source aloha/bin/activate
 cd act_dvrk/
 python data_recording/record_dvrk_episodes.py \
     --output_dir ./data/dvrk_dataset \
@@ -205,7 +205,7 @@ python data_recording/filter_hdf5.py \
 ### Train the ACT Policy
 
 ```bash
-conda activate aloha
+source aloha/bin/activate
 cd act_dvrk/
 python imitate_episodes.py \
     --task_name dvrk_retraction \
@@ -264,7 +264,7 @@ python imitate_episodes.py \
 Run inference on the real dVRK robot:
 
 ```bash
-conda activate aloha
+source aloha/bin/activate
 cd act_dvrk/
 python run_dvrk_act.py \
     --ckpt_dir ./checkpoints/dvrk_retraction \
