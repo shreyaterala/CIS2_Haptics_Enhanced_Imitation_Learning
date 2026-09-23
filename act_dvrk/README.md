@@ -183,7 +183,7 @@ Key flags:
 ### Inspect a Recorded Episode
 
 ```bash
-python data_recording/print_hdf5.py --episode ./data/dvrk_dataset/episode_001.hdf5
+python data_recording/print_hdf5.py ./data/dvrk_dataset/episode_001.hdf5
 ```
 
 ### Filter / Trim Episodes
