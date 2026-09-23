@@ -140,9 +140,9 @@ python wrist_cameras_video.py
 In a new terminal:
 
 ```bash
-cd ros2_ws
-ros2 launch /ros2_ws/src/dvrk/dvrk_video/ros2/launch/decklink_stereo_goovis.launch.py \
-    stereo_rig_name:=console1
+cd /ros2_ws/src/dvrk/dvrk_video/ros2/launch
+ros2 launch ./decklink_stereo_goovis.launch.py stereo_rig_name:=console1
+
 ```
 
 ### Step 3 — Start dVRK Teleoperation
